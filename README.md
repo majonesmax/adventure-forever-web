@@ -1,10 +1,13 @@
 # Adventure Forever, in the browser
 
+🕹️ **[Play it: majonesmax.github.io/adventure-forever-web](https://majonesmax.github.io/adventure-forever-web/)** -
+nothing to install; choose your ROM once and press Play.
+
 Atari 2600 *Adventure*, running unmodified in the [Stella](https://github.com/stella-emu/stella) emulator
 compiled to WebAssembly, redrawn from the game's 128 bytes of RAM the way
 [Adventure Forever](https://github.com/majonesmax/adventure-forever) does on the desktop. This repository is
 the web page, the core build and the deployment; the game knowledge, looks and packs live in
-Adventure Forever and are pulled from a release tag.
+Adventure Forever and are pulled from a pinned commit of it.
 
 **Status: playable.** One page: choose your ROM once (it's remembered in your browser), press Play, and the
 game runs in Adventure Forever's looks (NES, SNES, VGA, paper) with the desktop's keys, its background
