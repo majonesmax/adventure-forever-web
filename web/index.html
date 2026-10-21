@@ -41,8 +41,7 @@ addEventListener("keyup", (event) => { if (event.key in KEYS) joyMask &= ~(1 << 
 
 // Sound: each frame's samples are queued as one small buffer at the core's own sample rate (the browser
 // resamples). Browsers only allow sound after a click or key press, so any of either wakes it.
-const SAMPLE_RATE = stella._af_sample_rate();
-let audioContext = null, audioCursor = 0;
+let sampleRate = 0, audioContext = null, audioCursor = 0;   // the rate is known once a ROM is loaded
 function wakeAudio() {
   if (!audioContext) { try { audioContext = new AudioContext(); } catch { return; } }
   if (audioContext.state === "suspended") audioContext.resume();
@@ -51,11 +50,11 @@ addEventListener("click", wakeAudio);
 addEventListener("keydown", wakeAudio);
 function soundState() { return audioContext && audioContext.state === "running" ? "sound on" : "click or press a key for sound"; }
 function playAudio() {
-  if (!audioContext || audioContext.state !== "running") return;
+  if (!audioContext || audioContext.state !== "running" || !sampleRate) return;
   const frames = stella._af_audio_frames();
   if (!frames) return;
   const base = stella._af_audio() / 2;
-  const buffer = audioContext.createBuffer(2, frames, SAMPLE_RATE);
+  const buffer = audioContext.createBuffer(2, frames, sampleRate);
   const left = buffer.getChannelData(0), right = buffer.getChannelData(1);
   const heap = stella.HEAP16 ?? new Int16Array(stella.HEAPU8.buffer);
   for (let i = 0; i < frames; i++) { left[i] = heap[base + i * 2] / 32768; right[i] = heap[base + i * 2 + 1] / 32768; }
@@ -63,7 +62,7 @@ function playAudio() {
   source.buffer = buffer; source.connect(audioContext.destination);
   const now = audioContext.currentTime;
   if (audioCursor < now) audioCursor = now + 0.02;   // fell behind: start again a little ahead
-  source.start(audioCursor); audioCursor += frames / SAMPLE_RATE;
+  source.start(audioCursor); audioCursor += frames / sampleRate;
 }
 
 function drawFrame() {
@@ -101,9 +100,11 @@ function demoJoy(frame) {
 }
 function loop() {
   const start = performance.now();
+  if (demo && total === 0) wakeAudio();   // the demo plays sound too
   stella._af_set_joy(demo ? demoJoy(total++) : joyMask);
   stella._af_run();
-  drawFrame(); playAudio(); showRam();
+  drawFrame(); showRam();
+  try { playAudio(); } catch (error) { console.warn("sound stopped:", error); audioContext = null; }   // never the game
   busy += performance.now() - start; frames++;
   if (start - lastReport > 1000) {
     status.textContent = `running: ${frames} frames/s, ${(busy / frames).toFixed(2)} ms of work per frame - ${soundState()}`;
@@ -116,6 +117,7 @@ async function loadRom(bytes) {
   const pointer = stella._malloc(bytes.length);
   stella.HEAPU8.set(bytes, pointer);
   if (!stella._af_load(pointer, bytes.length)) { status.textContent = "the core refused that file"; return; }
+  sampleRate = stella._af_sample_rate();
   status.textContent = `loaded ${bytes.length} bytes, ${stella._af_fps()} fps`;
   canvas.focus();
   requestAnimationFrame(loop);

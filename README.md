@@ -38,12 +38,14 @@ Reset and walks right by itself.
 | `core/no-timer-thread.patch` | plain WebAssembly has no threads; Stella's timer thread only clears held switches at start and paces log messages, so the browser build skips it |
 | `core/test.mjs` | the Node check: loads a ROM, presses Reset, walks right, prints the 128 bytes and the time per frame |
 | `web/index.html` | the page: canvas, live RAM, keyboard joystick, the game's sound through Web Audio |
+| `tools/drive.mjs` | the page played by headless Chrome: presses Reset, walks right, and prints whether the hero moved and the frame rate held |
 | `.github/workflows/pages.yml` | builds the core and publishes the page to GitHub Pages |
 | `out/` | the build (not committed: the core is an emulator binary, like Adventure Forever's `cores/`) |
 
 Two things the build needed: `-fwasm-exceptions` (Stella throws and catches C++ exceptions; Emscripten turns
 them off by default), and the timer patch above. Measured on Apple Silicon: the core runs a frame in about
-0.5 ms of the 16.7 ms budget; `stella.wasm` is 2.1 MB.
+0.5 ms of the 16.7 ms budget, and the whole page (core, canvas, RAM panel, sound) about 2 ms in Chrome;
+`stella.wasm` is 2.1 MB.
 
 ## Plan
 
