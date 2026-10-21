@@ -7,7 +7,7 @@ OUT=$(cd "$HERE/.." && pwd)/out
 mkdir -p "$OUT"
 rm -f "$OUT/adventure-forever.zip"
 cd "$HERE/../adventure-forever"
-git describe --tags > VERSION.txt
+git describe --tags --always > VERSION.txt   # the tag, or the commit where there are no tags (a shallow checkout)
 zip -q -r "$OUT/adventure-forever.zip" engine looks content shared packs VERSION.txt LICENSE LICENSE-ASSETS.md \
   -x '*__pycache__*' -x '*.pyc' -x 'engine/effects/*.wav'
 rm VERSION.txt
