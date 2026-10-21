@@ -11,5 +11,5 @@ git describe --tags --always > VERSION.txt   # the tag, or the commit where ther
 zip -q -r "$OUT/adventure-forever.zip" engine looks content shared packs VERSION.txt LICENSE LICENSE-ASSETS.md \
   -x '*__pycache__*' -x '*.pyc' -x 'engine/effects/*.wav'
 rm VERSION.txt
-cp "$HERE/looks.html" "$HERE/atari.js" "$HERE/web_game.py" "$OUT/"
+cp "$HERE/looks.html" "$HERE/atari.js" "$HERE/web_game.py" "$HERE/music.js" "$HERE/music-worker.js" "$HERE/music_worker.py" "$OUT/"
 ls -la "$OUT/adventure-forever.zip"

@@ -9,8 +9,9 @@ Adventure Forever and are pulled from a release tag.
 **Status: it works, as an experiment.** `index.html` is the 2600 alone, with the live RAM beside it.
 `looks.html` draws the game in Adventure Forever's looks (NES, SNES, VGA, paper) using the desktop app's own
 Python, run in the browser by [Pyodide](https://pyodide.org): the same `engine/`, `looks/`, `content/` and
-packs, from a pinned release, unchanged. All four hold 60 frames a second. What's missing is the app
-around the game (room scrolls, music, the pack cycling, the overlays): see [Plan](#plan).
+packs, from a pinned release, unchanged. All four hold 60 frames a second, and the background music plays
+on each look's own band, made by the same code in a worker. What's missing is the rest of the app around
+the game (room scrolls, the pack cycling, the overlays): see [Plan](#plan).
 
 ## You need your own ROM
 
@@ -33,7 +34,8 @@ Then `sh web/bundle.sh` zips the drawing side of Adventure Forever (the `adventu
 to a release) into `out/` for `looks.html`.
 
 Arrows move, Space is the button, Enter is Reset (start), Shift is Select, and on the looks page L is the next
-look. Adventure only makes a sound when something happens. For testing, `?rom=adventure.a26` fetches a ROM
+look, M turns the music off and on, - and = change its volume. Adventure itself only makes a sound when
+something happens. For testing, `?rom=adventure.a26` fetches a ROM
 copy placed in `out/` (never commit it), and `&demo` presses Reset and walks right by itself.
 
 ## What's here
@@ -48,6 +50,8 @@ copy placed in `out/` (never commit it), and `&demo` presses Reset and walks rig
 | `web/index.html` | the 2600 alone, with the live RAM |
 | `web/looks.html` | the looks: Pyodide runs Adventure Forever's own Python, which draws each frame from the 128 bytes |
 | `web/web_game.py` | the glue Python: start(rom) reads the ROM's tables, draw(ram, frame) returns the look's picture |
+| `web/music.js` | the music: one song per area (title, overworld, dungeon, final, win) on the look's band, played through Web Audio; switching looks keeps the place in the song |
+| `web/music-worker.js`, `web/music_worker.py` | a second Pyodide in a Web Worker making each song with Adventure Forever's own song code (`engine/chiptune.py` and the bands), so the game never waits |
 | `web/bundle.sh` | zips the submodule's engine, looks, content, shared helpers and packs for the page |
 | `adventure-forever/` | the desktop project as a git submodule, pinned to a release tag |
 | `tools/drive.mjs` | the page played by headless Chrome: presses Reset, walks right, and prints whether the hero moved and the frame rate held |
@@ -80,8 +84,7 @@ game, which on the desktop is `app/window.py` (pygame) and here is JavaScript:
 
 1. Room scrolls (`app/transitions.py` is pure numpy, so it can run in Python here too), the "now showing"
    overlay, C and W for casts and worlds, the help panel.
-2. Music and the worlds' sounds: the desktop synthesises them in numpy (`engine/band.py`,
-   `engine/ambience.py`), which Pyodide can run; the browser plays the samples through Web Audio.
+2. The worlds' sounds with the music off (`engine/ambience.py`, numpy too), and a world's own soundtrack.
 3. Remember the ROM in the browser's storage, so it's picked once. Load faster: Pyodide and the packages
    are cached by the browser after the first visit.
 4. The wasm core from the same place as the other cores: one more entry in Adventure Forever's

@@ -18,7 +18,7 @@
 <body>
 <h3>Adventure Forever - the looks, drawn by the desktop app's own Python, in the browser</h3>
 <p>ROM: <input type="file" id="rom" accept=".a26,.bin"> &nbsp; <span id="status">loading…</span></p>
-<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select, L is the next look. Showing: <span id="showing">-</span>. The 2600 alone: <a href="index.html">index.html</a>.</p>
+<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select, L is the next look, M music off and on, - and = its volume. Showing: <span id="showing">-</span>. The 2600 alone: <a href="index.html">index.html</a>.</p>
 <div class="row">
   <canvas id="look" width="256" height="240"></canvas>
   <div>
@@ -28,6 +28,7 @@
 </div>
 <script type="module">
 import { Atari, demoJoy, romSource } from "./atari.js";
+import { Music } from "./music.js";
 
 const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.28.3/full/";
 const status = document.getElementById("status");
@@ -40,6 +41,7 @@ const demo = new URLSearchParams(location.search).has("demo");
 // The Atari and Python load side by side. Python: Pyodide, numpy and Pillow from the CDN, then Adventure
 // Forever's own drawing code (engine, looks, content, packs) unpacked from the zip the build made.
 status.textContent = "loading the core and Python…";
+const music = new Music();   // its worker loads alongside
 const [atari, pyodide] = await Promise.all([Atari.create(), loadPython()]);
 async function loadPython() {
   const { loadPyodide } = await import(PYODIDE + "pyodide.mjs");
@@ -52,8 +54,9 @@ async function loadPython() {
   pyodide.runPython(await (await fetch("web_game.py")).text());
   return pyodide;
 }
-const python = { start: pyodide.globals.get("start"), draw: pyodide.globals.get("draw"), nextLook: pyodide.globals.get("next_look") };
-atari.attachKeyboard(); atari.attachSound();
+const python = { start: pyodide.globals.get("start"), draw: pyodide.globals.get("draw"), nextLook: pyodide.globals.get("next_look"),
+                 musicArea: pyodide.globals.get("music_area"), lookKey: () => pyodide.globals.get("look_key") };
+atari.attachKeyboard(); atari.attachSound(); music.attachKeys();
 addEventListener("keydown", (event) => {
   if (event.key !== "l" && event.key !== "L") return;
   try { showing.textContent = python.nextLook(); }
@@ -79,9 +82,10 @@ function loop() {
   const t2 = performance.now();
   ramView.textContent = atari.ramText();
   atari.playAudio();
+  music.update(python.lookKey(), python.musicArea(), atari.audioContext);
   busyCore += t1 - t0; busyLook += t2 - t1; frames++;
   if (t0 - lastReport > 1000) {
-    status.textContent = `running: ${frames} frames/s, core ${(busyCore / frames).toFixed(2)} ms + look ${(busyLook / frames).toFixed(2)} ms per frame - ${atari.soundState}`;
+    status.textContent = `running: ${frames} frames/s, core ${(busyCore / frames).toFixed(2)} ms + look ${(busyLook / frames).toFixed(2)} ms per frame - ${atari.soundState} - ${music.state}`;
     frames = 0; busyCore = 0; busyLook = 0; lastReport = t0;
   }
   requestAnimationFrame(loop);

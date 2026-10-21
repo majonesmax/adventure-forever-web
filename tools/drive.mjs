@@ -11,17 +11,26 @@
 //
 // CHROME names the browser binary (default: Chrome on macOS); the profile goes in a temporary folder.
 // SHOT=folder saves a screenshot of each look on a page that has them.
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const [url, romPath, port] = [process.argv[2], process.argv[3], 9333];
+const [url, romPath] = [process.argv[2], process.argv[3]];
 const { spawn } = await import("node:child_process");
+const profile = mkdtempSync(join(tmpdir(), "adventure-forever-web-"));
 const chrome = spawn(CHROME,
-  ["--headless=new", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--user-data-dir=" + mkdtempSync(join(tmpdir(), "adventure-forever-web-")), url], { stdio: "ignore" });
+  ["--headless=new", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", "--remote-debugging-port=0", "--user-data-dir=" + profile, url], { stdio: "ignore" });
+process.on("exit", () => chrome.kill());   // never leave a browser behind, whatever happens below
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-let targets = [];
-for (let i = 0; i < 30 && !targets.length; i++) { await sleep(500); try { targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).filter((t) => t.type === "page" && t.url.startsWith(url.split("?")[0])); } catch {} }   // ours, not an extension's welcome page
+// Chrome picks a free port and writes it to the profile: no clash with another run still going.
+let port = 0, targets = [];
+for (let i = 0; i < 60 && !targets.length; i++) {
+  await sleep(500);
+  const portFile = join(profile, "DevToolsActivePort");
+  if (!port && existsSync(portFile)) port = Number(readFileSync(portFile, "utf8").split("\n")[0]);
+  if (port) try { targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).filter((t) => t.type === "page" && t.url.startsWith(url.split("?")[0])); } catch {}
+}
+if (!targets.length) throw new Error("the page never opened");
 const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
 await new Promise((r) => ws.onopen = r);
 let id = 0; const pending = new Map();
