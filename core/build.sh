@@ -1,5 +1,5 @@
 #!/bin/sh
-# The Stella libretro core as WebAssembly, plus the test page. Needs the Emscripten SDK (emcc on PATH:
+# The Stella libretro core as WebAssembly, plus the Node test. Needs the Emscripten SDK (emcc on PATH:
 # git clone https://github.com/emscripten-core/emsdk && ./emsdk install latest && ./emsdk activate latest
 # && source ./emsdk_env.sh) and a build folder; the output goes to out/ (never commit it: it's an emulator core).
 #
@@ -25,5 +25,5 @@ em++ -O2 -fwasm-exceptions -std=c++20 -I"$BUILD/stella/src/os/libretro" -c "$HER
 em++ -O2 -fwasm-exceptions shim.o stella_libretro.a -o stella.js \
   -sMODULARIZE -sEXPORT_ES6 -sEXPORT_NAME=createStella -sENVIRONMENT=web,node \
   -sALLOW_MEMORY_GROWTH -sEXPORTED_RUNTIME_METHODS=HEAPU8,HEAPU16,HEAP16 -sEXPORTED_FUNCTIONS=_malloc,_free
-cp "$HERE/../web/index.html" "$HERE/../web/atari.js" "$HERE/test.mjs" .
+cp "$HERE/test.mjs" .   # the page itself: web/bundle.sh
 ls -la stella.js stella.wasm

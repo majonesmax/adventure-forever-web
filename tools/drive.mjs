@@ -34,7 +34,9 @@ if (!targets.length) throw new Error("the page never opened");
 const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
 await new Promise((r) => ws.onopen = r);
 let id = 0; const pending = new Map();
-ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } else if (d.method === "Runtime.consoleAPICalled" || d.method === "Runtime.exceptionThrown") console.log("  console:", d.method === "Runtime.exceptionThrown" ? (d.params.exceptionDetails.exception?.description ?? d.params.exceptionDetails.text).slice(0, 4000) : JSON.stringify(d.params.args?.map((a) => a.value)).slice(0, 300)); };
+let lastLine = "";
+const once = (line) => { if (line !== lastLine) console.log("  console:", line); lastLine = line; };
+ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } else if (d.method === "Runtime.consoleAPICalled" || d.method === "Runtime.exceptionThrown") once( d.method === "Runtime.exceptionThrown" ? (d.params.exceptionDetails.exception?.description ?? d.params.exceptionDetails.text).slice(0, 4000) : d.params.args?.map((a) => a.value ?? a.description ?? "").join(" ").slice(0, 1500)); };
 const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
 await send("Runtime.enable");
 const read = async () => (await send("Runtime.evaluate", { expression: "document.getElementById('status').textContent + ' | ' + document.getElementById('ram').textContent.split('\\n').pop()", returnByValue: true })).result.value ?? "";   // the page may not be there yet
@@ -43,6 +45,8 @@ if (romPath) {   // the file picker, as a player would use it - once the page sa
   const { root } = await send("DOM.getDocument");
   const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: "#rom" });
   await send("DOM.setFileInputFiles", { nodeId, files: [romPath] });
+  await sleep(500);
+  await send("Runtime.evaluate", { expression: "document.getElementById('play')?.click()" });   // the start screen's Play
 }
 for (let i = 0; i < 120 && !(await read()).startsWith("running"); i++) await sleep(500);   // Python pages load for a while
 await sleep(1500); console.log("  running:          ", await read());
@@ -67,5 +71,12 @@ for (let i = 0; hasLooks && i < 4; i++) {
     const { writeFileSync } = await import("node:fs");
     writeFileSync(join(process.env.SHOT, `look-${i}.png`), Buffer.from(data, "base64"));
   }
+}
+for (const key of hasLooks ? ["c", "w"] : []) {   // C and W: the next cast and world
+  await send("Input.dispatchKeyEvent", { type: "keyDown", key, code: "Key" + key.toUpperCase(), windowsVirtualKeyCode: key.charCodeAt(0) - 32 });
+  await send("Input.dispatchKeyEvent", { type: "keyUp", key, code: "Key" + key.toUpperCase(), windowsVirtualKeyCode: key.charCodeAt(0) - 32 });
+  await sleep(2500);
+  const showing = (await send("Runtime.evaluate", { expression: "document.getElementById('showing').textContent", returnByValue: true })).result.value;
+  console.log(`  after ${key.toUpperCase()}: ${showing}`);
 }
 ws.close(); chrome.kill();
