@@ -15,7 +15,7 @@
 <body>
 <h3>Adventure Forever - the 2600 in the browser (Stella as WebAssembly)</h3>
 <p>ROM: <input type="file" id="rom" accept=".a26,.bin"> &nbsp; <span id="status">loading core…</span></p>
-<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select. Click the page once for sound.</p>
+<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select. Adventure only makes a sound when something happens: a pickup or drop, a dragon, the bat, the win.</p>
 <div class="row">
   <canvas id="screen" width="160" height="228"></canvas>
   <pre id="ram"></pre>
@@ -39,15 +39,23 @@ let joyMask = 0;
 addEventListener("keydown", (event) => { if (event.key in KEYS) { joyMask |= 1 << KEYS[event.key]; event.preventDefault(); } });
 addEventListener("keyup", (event) => { if (event.key in KEYS) joyMask &= ~(1 << KEYS[event.key]); });
 
-// Sound: each frame's samples are queued as one small buffer at the core's own sample rate.
+// Sound: each frame's samples are queued as one small buffer at the core's own sample rate (the browser
+// resamples). Browsers only allow sound after a click or key press, so any of either wakes it.
+const SAMPLE_RATE = stella._af_sample_rate();
 let audioContext = null, audioCursor = 0;
-addEventListener("click", () => { if (!audioContext) audioContext = new AudioContext({ sampleRate: stella._af_sample_rate() }); }, { once: true });
+function wakeAudio() {
+  if (!audioContext) { try { audioContext = new AudioContext(); } catch { return; } }
+  if (audioContext.state === "suspended") audioContext.resume();
+}
+addEventListener("click", wakeAudio);
+addEventListener("keydown", wakeAudio);
+function soundState() { return audioContext && audioContext.state === "running" ? "sound on" : "click or press a key for sound"; }
 function playAudio() {
-  if (!audioContext) return;
+  if (!audioContext || audioContext.state !== "running") return;
   const frames = stella._af_audio_frames();
   if (!frames) return;
   const base = stella._af_audio() / 2;
-  const buffer = audioContext.createBuffer(2, frames, audioContext.sampleRate);
+  const buffer = audioContext.createBuffer(2, frames, SAMPLE_RATE);
   const left = buffer.getChannelData(0), right = buffer.getChannelData(1);
   const heap = stella.HEAP16 ?? new Int16Array(stella.HEAPU8.buffer);
   for (let i = 0; i < frames; i++) { left[i] = heap[base + i * 2] / 32768; right[i] = heap[base + i * 2 + 1] / 32768; }
@@ -55,7 +63,7 @@ function playAudio() {
   source.buffer = buffer; source.connect(audioContext.destination);
   const now = audioContext.currentTime;
   if (audioCursor < now) audioCursor = now + 0.02;   // fell behind: start again a little ahead
-  source.start(audioCursor); audioCursor += frames / audioContext.sampleRate;
+  source.start(audioCursor); audioCursor += frames / SAMPLE_RATE;
 }
 
 function drawFrame() {
@@ -98,7 +106,7 @@ function loop() {
   drawFrame(); playAudio(); showRam();
   busy += performance.now() - start; frames++;
   if (start - lastReport > 1000) {
-    status.textContent = `running: ${frames} frames/s, ${(busy / frames).toFixed(2)} ms of work per frame`;
+    status.textContent = `running: ${frames} frames/s, ${(busy / frames).toFixed(2)} ms of work per frame - ${soundState()}`;
     frames = 0; busy = 0; lastReport = start;
   }
   requestAnimationFrame(loop);
