@@ -10,6 +10,7 @@
 // works against the live site:  node tools/drive.mjs https://majonesmax.github.io/adventure-forever-web/ /path/to/adventure.a26
 //
 // CHROME names the browser binary (default: Chrome on macOS); the profile goes in a temporary folder.
+// SHOT=folder saves a screenshot of each look on a page that has them.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +25,7 @@ for (let i = 0; i < 30 && !targets.length; i++) { await sleep(500); try { target
 const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
 await new Promise((r) => ws.onopen = r);
 let id = 0; const pending = new Map();
-ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } else if (d.method === "Runtime.consoleAPICalled" || d.method === "Runtime.exceptionThrown") console.log("  console:", JSON.stringify(d.params).slice(0, 300)); };
+ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } else if (d.method === "Runtime.consoleAPICalled" || d.method === "Runtime.exceptionThrown") console.log("  console:", d.method === "Runtime.exceptionThrown" ? (d.params.exceptionDetails.exception?.description ?? d.params.exceptionDetails.text).slice(0, 4000) : JSON.stringify(d.params.args?.map((a) => a.value)).slice(0, 300)); };
 const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
 await send("Runtime.enable");
 const read = async () => (await send("Runtime.evaluate", { expression: "document.getElementById('status').textContent + ' | ' + document.getElementById('ram').textContent.split('\\n').pop()", returnByValue: true })).result.value;
@@ -34,11 +35,28 @@ if (romPath) {   // the file picker, as a player would use it - once the page sa
   const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: "#rom" });
   await send("DOM.setFileInputFiles", { nodeId, files: [romPath] });
 }
-await sleep(3000); console.log("  after 3 s:        ", await read());
+for (let i = 0; i < 120 && !(await read()).startsWith("running"); i++) await sleep(500);   // Python pages load for a while
+await sleep(1500); console.log("  running:          ", await read());
 await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }); await sleep(300);
 await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }); await sleep(1000);
 console.log("  after Enter:      ", await read());
 await send("Input.dispatchKeyEvent", { type: "keyDown", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }); await sleep(1000);
 await send("Input.dispatchKeyEvent", { type: "keyUp", key: "ArrowRight", code: "ArrowRight", windowsVirtualKeyCode: 39 }); await sleep(1500);
 console.log("  after Right 1 s:  ", await read());
+// A page with looks (#showing): L cycles them, each one's name and cost reported.
+const hasLooks = (await send("Runtime.evaluate", { expression: "!!document.getElementById('showing')", returnByValue: true })).result.value;
+for (let i = 0; hasLooks && i < 4; i++) {
+  if (i > 0) {
+    await send("Input.dispatchKeyEvent", { type: "keyDown", key: "l", code: "KeyL", windowsVirtualKeyCode: 76 });
+    await send("Input.dispatchKeyEvent", { type: "keyUp", key: "l", code: "KeyL", windowsVirtualKeyCode: 76 });
+    await sleep(2500);
+  }
+  const showing = (await send("Runtime.evaluate", { expression: "document.getElementById('showing').textContent", returnByValue: true })).result.value;
+  console.log(`  look ${showing}:`.padEnd(22), (await read()).split(" | ")[0]);
+  if (process.env.SHOT) {   // SHOT=folder: a screenshot of each look
+    const { data } = await send("Page.captureScreenshot", { format: "png" });
+    const { writeFileSync } = await import("node:fs");
+    writeFileSync(join(process.env.SHOT, `look-${i}.png`), Buffer.from(data, "base64"));
+  }
+}
 ws.close(); chrome.kill();

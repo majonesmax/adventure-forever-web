@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adventure Forever</title>
+<style>
+  body { font-family: ui-monospace, Menlo, monospace; background: #111; color: #ddd; margin: 16px; }
+  canvas { image-rendering: pixelated; background: #000; display: block; }
+  #look { width: 768px; height: 720px; }
+  #screen { width: 320px; height: 228px; }
+  pre { font-size: 13px; line-height: 1.4; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  #status { color: #9c9; }
+  a { color: #9cf; }
+</style>
+</head>
+<body>
+<h3>Adventure Forever - the looks, drawn by the desktop app's own Python, in the browser</h3>
+<p>ROM: <input type="file" id="rom" accept=".a26,.bin"> &nbsp; <span id="status">loading…</span></p>
+<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select, L is the next look. Showing: <span id="showing">-</span>. The 2600 alone: <a href="index.html">index.html</a>.</p>
+<div class="row">
+  <canvas id="look" width="256" height="240"></canvas>
+  <div>
+    <canvas id="screen" width="160" height="228"></canvas>
+    <pre id="ram"></pre>
+  </div>
+</div>
+<script type="module">
+import { Atari, demoJoy, romSource } from "./atari.js";
+
+const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.28.3/full/";
+const status = document.getElementById("status");
+const showing = document.getElementById("showing");
+const lookCanvas = document.getElementById("look"), lookContext = lookCanvas.getContext("2d");
+const canvas2600 = document.getElementById("screen");
+const ramView = document.getElementById("ram");
+const demo = new URLSearchParams(location.search).has("demo");
+
+// The Atari and Python load side by side. Python: Pyodide, numpy and Pillow from the CDN, then Adventure
+// Forever's own drawing code (engine, looks, content, packs) unpacked from the zip the build made.
+status.textContent = "loading the core and Python…";
+const [atari, pyodide] = await Promise.all([Atari.create(), loadPython()]);
+async function loadPython() {
+  const { loadPyodide } = await import(PYODIDE + "pyodide.mjs");
+  const pyodide = await loadPyodide({ indexURL: PYODIDE });
+  await pyodide.loadPackage(["numpy", "pillow"]);
+  const source = await (await fetch("adventure-forever.zip")).arrayBuffer();
+  pyodide.FS.mkdir("/adventure-forever");
+  pyodide.unpackArchive(source, "zip", { extractDir: "/adventure-forever" });
+  pyodide.runPython("import sys; sys.path.insert(0, '/adventure-forever')");
+  pyodide.runPython(await (await fetch("web_game.py")).text());
+  return pyodide;
+}
+const python = { start: pyodide.globals.get("start"), draw: pyodide.globals.get("draw"), nextLook: pyodide.globals.get("next_look") };
+atari.attachKeyboard(); atari.attachSound();
+addEventListener("keydown", (event) => {
+  if (event.key !== "l" && event.key !== "L") return;
+  try { showing.textContent = python.nextLook(); }
+  catch (error) { showing.textContent = "that look failed to load (see the console); press L again"; console.error(error); }
+});
+status.textContent = "core ready - choose your adventure.a26";
+
+function drawLook(frameNo) {
+  const picture = python.draw(atari.ram, frameNo);      // a numpy array (240, 256, 4) in Python's memory
+  const view = picture.getBuffer("u8clamped");
+  lookContext.putImageData(new ImageData(view.data, 256, 240), 0, 0);
+  view.release(); picture.destroy();
+}
+
+let frames = 0, busyCore = 0, busyLook = 0, lastReport = performance.now(), total = 0;
+function loop() {
+  const t0 = performance.now();
+  if (demo && total === 0) atari.wakeAudio();
+  atari.run(demo ? demoJoy(total++) : atari.joyMask);
+  atari.draw2600(canvas2600);
+  const t1 = performance.now();
+  drawLook(total);
+  const t2 = performance.now();
+  ramView.textContent = atari.ramText();
+  atari.playAudio();
+  busyCore += t1 - t0; busyLook += t2 - t1; frames++;
+  if (t0 - lastReport > 1000) {
+    status.textContent = `running: ${frames} frames/s, core ${(busyCore / frames).toFixed(2)} ms + look ${(busyLook / frames).toFixed(2)} ms per frame - ${atari.soundState}`;
+    frames = 0; busyCore = 0; busyLook = 0; lastReport = t0;
+  }
+  requestAnimationFrame(loop);
+}
+
+romSource(document.getElementById("rom"), (bytes) => {
+  if (!atari.load(bytes)) { status.textContent = "the core refused that file"; return; }
+  status.textContent = "reading the ROM's tables…";
+  try { showing.textContent = python.start(bytes); } catch (error) { status.textContent = "Python: " + error; throw error; }
+  status.textContent = `loaded ${bytes.length} bytes`;
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>

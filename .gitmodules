@@ -1,0 +1,3 @@
+[submodule "adventure-forever"]
+	path = adventure-forever
+	url = https://github.com/majonesmax/adventure-forever.git

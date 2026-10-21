@@ -22,11 +22,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: true   # adventure-forever, pinned to a release: the drawing side
       - uses: mymindstorm/setup-emsdk@v14
         with:
           version: latest
       - name: Build the core and the page
         run: sh core/build.sh build
+      - name: Bundle Adventure Forever's drawing side for the looks page
+        run: sh web/bundle.sh
       - name: The site is out/ without the Node test
         run: rm -f out/test.mjs out/shim.o out/stella_libretro.a
       - uses: actions/upload-pages-artifact@v3
