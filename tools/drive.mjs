@@ -6,12 +6,15 @@
 //   cp /path/to/adventure.a26 out/ && (cd out && python3 -m http.server 8766)
 //   node tools/drive.mjs "http://127.0.0.1:8766/index.html?rom=adventure.a26"
 //
+// Or give a ROM path as the second argument and it goes in through the page's file picker, which also
+// works against the live site:  node tools/drive.mjs https://majonesmax.github.io/adventure-forever-web/ /path/to/adventure.a26
+//
 // CHROME names the browser binary (default: Chrome on macOS); the profile goes in a temporary folder.
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const [url, port] = [process.argv[2], 9333];
+const [url, romPath, port] = [process.argv[2], process.argv[3], 9333];
 const { spawn } = await import("node:child_process");
 const chrome = spawn(CHROME,
   ["--headless=new", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--user-data-dir=" + mkdtempSync(join(tmpdir(), "adventure-forever-web-")), url], { stdio: "ignore" });
@@ -25,6 +28,12 @@ ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { p
 const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
 await send("Runtime.enable");
 const read = async () => (await send("Runtime.evaluate", { expression: "document.getElementById('status').textContent + ' | ' + document.getElementById('ram').textContent.split('\\n').pop()", returnByValue: true })).result.value;
+if (romPath) {   // the file picker, as a player would use it - once the page says the core is ready
+  for (let i = 0; i < 60 && !(await read()).startsWith("core ready"); i++) await sleep(500);
+  const { root } = await send("DOM.getDocument");
+  const { nodeId } = await send("DOM.querySelector", { nodeId: root.nodeId, selector: "#rom" });
+  await send("DOM.setFileInputFiles", { nodeId, files: [romPath] });
+}
 await sleep(3000); console.log("  after 3 s:        ", await read());
 await send("Input.dispatchKeyEvent", { type: "keyDown", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }); await sleep(300);
 await send("Input.dispatchKeyEvent", { type: "keyUp", key: "Enter", code: "Enter", windowsVirtualKeyCode: 13 }); await sleep(1000);
