@@ -10,7 +10,7 @@ Adventure Forever and are pulled from a release tag.
 game runs in Adventure Forever's looks (NES, SNES, VGA, paper) with the desktop's keys, its background
 music on each look's own band, and fullscreen. The drawing and the music are the desktop app's own Python,
 run in the browser by [Pyodide](https://pyodide.org): the same `engine/`, `looks/`, `content/` and packs,
-from a pinned release, unchanged. What's still missing: see [Plan](#plan).
+from a pinned commit, unchanged. What's still missing: see [Plan](#plan).
 
 ## You need your own ROM
 
@@ -30,7 +30,7 @@ sh web/bundle.sh                              # the drawing side of Adventure Fo
 ```
 
 Then `sh web/bundle.sh` zips the drawing side of Adventure Forever (the `adventure-forever` submodule, pinned
-to a release) into `out/` with the page.
+to a commit on main, moved on by hand) into `out/` with the page.
 
 ## Keys
 
@@ -66,7 +66,7 @@ copy placed in `out/` (never commit it) and starts the game, and `&demo` presses
 | `web/music.js` | the music: one song per area (title, overworld, dungeon, final, win) on the look's band, played through Web Audio; switching looks keeps the place in the song |
 | `web/music-worker.js`, `web/music_worker.py` | a second Pyodide in a Web Worker making each song with Adventure Forever's own song code (`engine/chiptune.py` and the bands), so the game never waits |
 | `web/bundle.sh` | zips the submodule's engine, looks, content, shared helpers and packs for the page |
-| `adventure-forever/` | the desktop project as a git submodule, pinned to a release tag |
+| `adventure-forever/` | the desktop project as a git submodule, pinned to a commit |
 | `tools/drive.mjs` | the page played by headless Chrome: presses Reset, walks right, and prints whether the hero moved and the frame rate held |
 | `.github/workflows/pages.yml` | builds the core and publishes the page to GitHub Pages |
 | `out/` | the build (not committed: the core is an emulator binary, like Adventure Forever's `cores/`) |
@@ -85,10 +85,10 @@ them off by default), and the timer patch above. Measured on Apple Silicon in Ch
 Downloads: `stella.wasm` 2.1 MB; Pyodide with numpy and Pillow about 15 MB from the CDN (cached by the
 browser); the drawing side 0.6 MB. The looks page takes a few seconds to start.
 
-One portability bug turned up: the PBJ pack's world hashes pixel coordinates with a constant too big for a
-32-bit integer, which numpy defaults to under WebAssembly (the desktop's is 64-bit). The fix in Adventure
-Forever casts to 64-bit explicitly; until a release with it is pinned here, L passes over the SNES look
-(whose own world it is) and W onto that world shows nothing until W again.
+Two things the browser needed from Adventure Forever, both in it now: the PBJ pack's world hashed pixel
+coordinates with constants too big for a 32-bit integer, which numpy defaults to under WebAssembly (the
+desktop's is 64-bit; the hashes are explicit now), and the palette module imported the emulator binding, and
+with it the sound card, at import time (now only when probing).
 
 ## Plan
 

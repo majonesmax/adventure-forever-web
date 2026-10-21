@@ -5,24 +5,18 @@ for the canvas; music_area() for which music that moment wants (the songs are ma
 and showing() for the "look · cast · world" line.
 
 The desktop's native parts are not here: the emulator is the wasm core on the JavaScript side (this file only
-ever sees its 128 bytes), and the sound card module is stood in for, since engine.palette imports the desktop
-emulator binding, which imports it.
+ever sees its 128 bytes), and nothing on the drawing side needs a sound card.
 """
 
-import sys
-import types
+import numpy as np
 
-sys.modules["sounddevice"] = types.ModuleType("sounddevice")  # the desktop sound card: not in a browser
-
-import numpy as np  # noqa: E402
-
-import content  # noqa: E402
-import looks  # noqa: E402
-from engine import music  # noqa: E402
-from engine import rooms as R  # noqa: E402
-from engine.state import Game  # noqa: E402
-from looks.base import RoomLook  # noqa: E402
-from shared import layout as L  # noqa: E402
+import content
+import looks
+from engine import music
+from engine import rooms as R
+from engine.state import Game
+from looks.base import RoomLook
+from shared import layout as L
 
 ROM_PATH = "/adventure.a26"   # the player's ROM, in the browser's memory only
 

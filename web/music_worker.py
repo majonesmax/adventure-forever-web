@@ -2,14 +2,9 @@
 the look's band (the NES chip, the SNES orchestra, the VGA sound card, paper's toy box), exactly as the
 desktop makes them - in a Web Worker, so the game never waits. render(look, area) -> (left, right, loop)."""
 
-import sys
-import types
+import numpy as np
 
-sys.modules["sounddevice"] = types.ModuleType("sounddevice")  # the desktop sound card: not in a browser
-
-import numpy as np  # noqa: E402
-
-from engine import chiptune, music  # noqa: E402
+from engine import chiptune, music
 
 BANDS = music.bands()
 
