@@ -21,14 +21,14 @@ const chrome = spawn(CHROME,
   ["--headless=new", "--disable-gpu", "--autoplay-policy=no-user-gesture-required", `--remote-debugging-port=${port}`, "--user-data-dir=" + mkdtempSync(join(tmpdir(), "adventure-forever-web-")), url], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let targets = [];
-for (let i = 0; i < 30 && !targets.length; i++) { await sleep(500); try { targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).filter((t) => t.type === "page"); } catch {} }
+for (let i = 0; i < 30 && !targets.length; i++) { await sleep(500); try { targets = (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).filter((t) => t.type === "page" && t.url.startsWith(url.split("?")[0])); } catch {} }   // ours, not an extension's welcome page
 const ws = new WebSocket(targets[0].webSocketDebuggerUrl);
 await new Promise((r) => ws.onopen = r);
 let id = 0; const pending = new Map();
 ws.onmessage = (m) => { const d = JSON.parse(m.data); if (pending.has(d.id)) { pending.get(d.id)(d.result); pending.delete(d.id); } else if (d.method === "Runtime.consoleAPICalled" || d.method === "Runtime.exceptionThrown") console.log("  console:", d.method === "Runtime.exceptionThrown" ? (d.params.exceptionDetails.exception?.description ?? d.params.exceptionDetails.text).slice(0, 4000) : JSON.stringify(d.params.args?.map((a) => a.value)).slice(0, 300)); };
 const send = (method, params = {}) => new Promise((r) => { pending.set(++id, r); ws.send(JSON.stringify({ id, method, params })); });
 await send("Runtime.enable");
-const read = async () => (await send("Runtime.evaluate", { expression: "document.getElementById('status').textContent + ' | ' + document.getElementById('ram').textContent.split('\\n').pop()", returnByValue: true })).result.value;
+const read = async () => (await send("Runtime.evaluate", { expression: "document.getElementById('status').textContent + ' | ' + document.getElementById('ram').textContent.split('\\n').pop()", returnByValue: true })).result.value ?? "";   // the page may not be there yet
 if (romPath) {   // the file picker, as a player would use it - once the page says the core is ready
   for (let i = 0; i < 60 && !(await read()).startsWith("core ready"); i++) await sleep(500);
   const { root } = await send("DOM.getDocument");
