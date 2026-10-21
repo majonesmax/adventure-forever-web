@@ -1,27 +1,33 @@
 // Background music, as on the desktop (engine/music.py): one song per area (title, overworld, dungeon,
-// final, win), played by the look's band. The songs are made in a worker (music-worker.js) the first time
+// final, win), played by the look's band - a look with no band (paper) plays no song, and the world is heard. The songs are made in a worker (music-worker.js) the first time
 // they're needed and kept; switching looks in the same area keeps the place in the song. M turns the music
 // off and on, - and = change its volume.
 export class Music {
   constructor() {
     this.worker = new Worker(new URL("music-worker.js", import.meta.url), { type: "module" });
     this.ready = false;
+    this.bands = [];               // the looks with a band, from the worker
+    this.ambience = null;          // the world's sounds come through the same worker (see attachAmbience)
     this.songs = new Map();      // "look/area" -> {left, right, loop, rate}
     this.asked = new Set();      // songs the worker is making
     this.wanted = null;          // {look, area} the game is in
-    this.playing = null;         // {key, area, source, buffer, startedAt, offset}
+    this.playing_ = null;        // {key, area, source, buffer, startedAt, offset}
     this.on = true;
     this.gain = 1.0;
     this.context = null;
     this.gainNode = null;
     this.worker.onerror = (event) => console.error("music worker:", event.message);
     this.worker.onmessage = ({ data }) => {
-      if (data.type === "ready") { this.ready = true; return; }
+      if (data.type === "ready") { this.ready = true; this.bands = data.bands; return; }
+      if (data.type === "sound") { this.ambience?.add(data); return; }
       const key = `${data.look}/${data.area}`;
       this.songs.set(key, data);
       this.asked.delete(key);
     };
   }
+
+  attachAmbience(ambience) { this.ambience = ambience; }
+  requestSound(name) { if (this.ready) this.worker.postMessage({ kind: "sound", name }); else setTimeout(() => this.requestSound(name), 500); }
 
   attachKeys() {
     addEventListener("keydown", (event) => {
@@ -49,24 +55,25 @@ export class Music {
       this.gainNode.connect(context.destination);
     }
     this.wanted = { look, area };
+    if (this.ready && !this.bands.includes(look)) { this.stop(); return; }   // no band: the world is heard instead
     const key = `${look}/${area}`;
     if (!this.songs.has(key)) {
-      if (this.ready && !this.asked.has(key)) { this.asked.add(key); this.worker.postMessage({ look, area }); }
+      if (this.ready && !this.asked.has(key)) { this.asked.add(key); this.worker.postMessage({ kind: "song", look, area }); }
       return;
     }
-    if (this.on && this.context && this.context.state === "running" && (!this.playing || this.playing.key !== key)) this.play(key, area);
+    if (this.on && this.context && this.context.state === "running" && (!this.playing_ || this.playing_.key !== key)) this.play(key, area);
   }
 
   play(key, area) {
     const song = this.songs.get(key);
     const buffer = song.buffer ?? this.makeBuffer(song);
     let offset = 0;
-    if (this.playing && this.playing.area === area) offset = this.position() % buffer.duration;   // the same place, on another band
+    if (this.playing_ && this.playing_.area === area) offset = this.position() % buffer.duration;   // the same place, on another band
     this.stop();
     const source = this.context.createBufferSource();
     source.buffer = buffer; source.loop = song.loop; source.connect(this.gainNode);
     source.start(0, offset);
-    this.playing = { key, area, source, buffer, startedAt: this.context.currentTime, offset };
+    this.playing_ = { key, area, source, buffer, startedAt: this.context.currentTime, offset };
   }
 
   makeBuffer(song) {
@@ -77,19 +84,22 @@ export class Music {
   }
 
   position() {   // seconds into the song playing
-    return this.context.currentTime - this.playing.startedAt + this.playing.offset;
+    return this.context.currentTime - this.playing_.startedAt + this.playing_.offset;
   }
 
   stop() {
-    if (this.playing) { try { this.playing.source.stop(); } catch {} }
-    this.playing = null;
+    if (this.playing_) { try { this.playing_.source.stop(); } catch {} }
+    this.playing_ = null;
   }
+
+  get playing() { return this.on && this.playing_ != null; }
 
   get state() {
     if (!this.on) return "music off (M)";
     if (!this.wanted) return "music: -";
+    if (this.ready && !this.bands.includes(this.wanted.look)) return `music: none on ${this.wanted.look}`;
     const key = `${this.wanted.look}/${this.wanted.area}`;
     if (!this.songs.has(key)) return this.ready ? `music: making ${this.wanted.area}…` : "music: loading…";
-    return this.playing ? `music: ${this.playing.area} on ${this.wanted.look}, volume ${this.gain.toFixed(1)}` : "music: ready";
+    return this.playing_ ? `music: ${this.playing_.area} on ${this.wanted.look}, volume ${this.gain.toFixed(1)}` : "music: ready";
   }
 }

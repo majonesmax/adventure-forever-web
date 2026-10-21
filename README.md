@@ -8,7 +8,8 @@ Adventure Forever and are pulled from a release tag.
 
 **Status: playable.** One page: choose your ROM once (it's remembered in your browser), press Play, and the
 game runs in Adventure Forever's looks (NES, SNES, VGA, paper) with the desktop's keys, its background
-music on each look's own band, and fullscreen. The drawing and the music are the desktop app's own Python,
+music on each look's own band (paper has none: there you hear the world, a breeze and birds, drips in the
+catacombs), and fullscreen. The drawing and the music are the desktop app's own Python,
 run in the browser by [Pyodide](https://pyodide.org): the same `engine/`, `looks/`, `content/` and packs,
 from a pinned commit, unchanged. What's still missing: see [Plan](#plan).
 
@@ -45,7 +46,7 @@ other music sources). H shows this list in the game.
 | I | which look, cast and world |
 | V | view: look, side by side with the 2600, the 2600 alone, grid (with the live RAM) |
 | F | fullscreen on / off (also the button in the corner) |
-| M, - / = | music on / off; quieter / louder |
+| M, - / = | music on / off (off: hear the world); quieter / louder |
 | S, D, P | screenshot; debug line (speed, render time); pause |
 | H, Esc | help; back to the start |
 
@@ -63,8 +64,9 @@ copy placed in `out/` (never commit it) and starts the game, and `&demo` presses
 | `web/atari.js` | the Atari in the browser: the core, the keyboard as joystick, sound through Web Audio, the 2600's picture, the RAM as text |
 | `web/index.html`, `web/app.js` | the page: the start screen (your ROM, remembered in the browser), then the game with the keys, views, help, pause, screenshot and fullscreen |
 | `web/web_game.py` | the glue Python: start(rom) reads the ROM's tables, draw(ram, frame) returns the look's picture, L C W cycle the look, cast and world |
-| `web/music.js` | the music: one song per area (title, overworld, dungeon, final, win) on the look's band, played through Web Audio; switching looks keeps the place in the song |
-| `web/music-worker.js`, `web/music_worker.py` | a second Pyodide in a Web Worker making each song with Adventure Forever's own song code (`engine/chiptune.py` and the bands), so the game never waits |
+| `web/music.js` | the music: one song per area (title, overworld, dungeon, final, win) on the look's band, played through Web Audio; switching looks keeps the place in the song; paper has no band |
+| `web/ambience.js` | the world's sounds, heard with no music playing: a bed that loops and fades between places, calls dropped in at random, left or right |
+| `web/music-worker.js`, `web/music_worker.py` | a second Pyodide in a Web Worker making each song and each world sound with Adventure Forever's own code (`engine/chiptune.py`, the bands, `engine/ambience.py`), so the game never waits |
 | `web/bundle.sh` | zips the submodule's engine, looks, content, shared helpers and packs for the page |
 | `adventure-forever/` | the desktop project as a git submodule, pinned to a commit |
 | `tools/drive.mjs` | the page played by headless Chrome: presses Reset, walks right, and prints whether the hero moved and the frame rate held |
@@ -97,7 +99,7 @@ enough, so there is one codebase, and the golden tests keep proving it. What's l
 game, which on the desktop is `app/window.py` (pygame) and here is JavaScript:
 
 1. Room scrolls (`app/transitions.py` is pure numpy, so it can run in Python here too).
-2. The worlds' sounds with the music off (`engine/ambience.py`, numpy too), and a world's own soundtrack.
+2. A world's own soundtrack, and the footsteps and dragon stomps heard with the music off.
 3. Touch controls for phones and tablets; a gamepad.
 4. The wasm core from the same place as the other cores: one more entry in Adventure Forever's
    `stella-cores.yml` matrix, so every platform's core is in one checksummed release.

@@ -27,6 +27,7 @@ world_key: str | None = None
 made: dict[tuple[str, str | None, str | None], RoomLook] = {}   # each look with a cast and world, made once
 rgba = np.full((L.SCREEN_H, L.SCREEN_W, 4), 255, np.uint8)   # the picture handed to the canvas (alpha 255)
 area = "title"                                                # the music area of the last frame drawn
+sound: str | None = None                                      # the world's sound where the hero is
 
 
 def start(rom) -> str:  # noqa: ANN001 - a JavaScript Uint8Array
@@ -107,11 +108,12 @@ def showing() -> str:
 
 def draw(ram, frame_no: int):  # noqa: ANN001, ANN201 - a JavaScript Uint8Array in, a numpy array out
     """The look's picture for this frame, from the 128 bytes."""
-    global area
+    global area, sound
     assert game is not None
     ram_bytes = np.frombuffer(ram.to_bytes(), np.uint8)
     state = game.state(ram_bytes)
     area = music.area_for(state)
+    sound = look().world.sound(state.room_num)
     picture = look().draw(state, frame_no)
     rgba[:, :, :3] = picture
     return rgba
@@ -120,3 +122,8 @@ def draw(ram, frame_no: int):  # noqa: ANN001, ANN201 - a JavaScript Uint8Array 
 def music_area() -> str:
     """Which music belongs to the last frame drawn: title / overworld / dungeon / final / win."""
     return area
+
+
+def world_sound() -> str | None:
+    """What the world sounds like where the hero is (engine/ambience.py: summer, woods, cave...), or None."""
+    return sound

@@ -3,6 +3,7 @@
 // D the debug line; S a screenshot; H help; Esc back to the start.
 import { Atari, demoJoy } from "./atari.js";
 import { Music } from "./music.js";
+import { Ambience } from "./ambience.js";
 
 const PYODIDE = "https://cdn.jsdelivr.net/pyodide/v0.28.3/full/";
 const ROM_KEY = "adventure-forever.rom";      // the ROM, remembered in this browser only
@@ -11,7 +12,7 @@ export const KEYS = [   // what the help panel lists (the desktop's list, less w
   ["PLAY", [["Arrows", "move"], ["Space", "fire: drop what you carry"], ["Tab", "game select (games 1-3)"], ["Enter", "game reset: start"]]],
   ["WHAT YOU SEE", [["L", "next look: NES, SNES, VGA, paper"], ["C", "next cast: the knight, PBJ and friends"], ["W", "next world: castles, kingdoms"],
                     ["I", "which look, cast and world"], ["V", "view: look, side by side, 2600, grid"], ["F", "fullscreen on / off"]]],
-  ["SOUND", [["M", "music on / off"], ["- / =", "music quieter / louder"]]],
+  ["SOUND", [["M", "music on / off (off: hear the world)"], ["- / =", "music quieter / louder"]]],
   ["MORE", [["S", "screenshot"], ["D", "debug line: speed, render time"], ["P", "pause"], ["H", "help: every key"], ["Esc", "back to the start"]]],
 ];
 
@@ -47,11 +48,13 @@ $("help-list").innerHTML = KEYS.map(([title, rows]) => `<h4>${title}</h4>` + row
 $("help").innerHTML = $("help-list").innerHTML;
 
 // --- the emulator and the Python, loading while the start screen shows ----------------------------------
-let loaded = false, atari, python, music;
+let loaded = false, atari, python, music, ambience;
 showRom();
 const status = $("status");
 status.textContent = "loading the core and Python…";
 music = new Music();
+ambience = new Ambience((name) => music.requestSound(name));
+music.attachAmbience(ambience);
 [atari, python] = await Promise.all([Atari.create(), loadPython()]);
 async function loadPython() {
   const { loadPyodide } = await import(PYODIDE + "pyodide.mjs");
@@ -64,7 +67,7 @@ async function loadPython() {
   pyodide.runPython(await (await fetch("web_game.py")).text());
   const fn = (name) => pyodide.globals.get(name);
   return { start: fn("start"), draw: fn("draw"), nextLook: fn("next_look"), nextCast: fn("next_cast"), nextWorld: fn("next_world"),
-           showing: fn("showing"), musicArea: fn("music_area"), lookKey: () => pyodide.globals.get("look_key") };
+           showing: fn("showing"), musicArea: fn("music_area"), worldSound: fn("world_sound"), lookKey: () => pyodide.globals.get("look_key") };
 }
 loaded = true;
 status.textContent = "core ready - choose your adventure.a26";
@@ -105,9 +108,10 @@ function frame() {
   if (view === "grid") ramView.textContent = atari.ramText();
   atari.playAudio();
   music.update(python.lookKey(), python.musicArea(), atari.audioContext);
+  ambience.follow(python.worldSound(), !music.playing && !paused, atari.audioContext);
   total++; frames++; busyCore += t1 - t0; busyLook += t2 - t1;
   if (t0 - lastReport > 1000) {
-    status.textContent = `running: ${frames} frames/s, core ${(busyCore / frames).toFixed(2)} ms + look ${(busyLook / frames).toFixed(2)} ms per frame - ${atari.soundState} - ${music.state}`;
+    status.textContent = `running: ${frames} frames/s, core ${(busyCore / frames).toFixed(2)} ms + look ${(busyLook / frames).toFixed(2)} ms per frame - ${atari.soundState} - ${music.state} - ${ambience.state}`;
     frames = 0; busyCore = 0; busyLook = 0; lastReport = t0;
   }
 }
