@@ -1,0 +1,8 @@
+# the built emulator core and page bundle - built by core/build.sh, never committed (same rule as adventure-forever's cores/)
+out/
+# a build folder for the Stella source
+build/
+# never a ROM
+*.a26
+*.bin
+.DS_Store

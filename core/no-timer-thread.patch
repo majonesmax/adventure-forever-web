@@ -1,0 +1,16 @@
+diff --git a/src/common/TimerManager.cxx b/src/common/TimerManager.cxx
+index dff6c703..a9d19f26 100644
+--- a/src/common/TimerManager.cxx
++++ b/src/common/TimerManager.cxx
+@@ -50,8 +50,10 @@ TimerManager::TimerId TimerManager::addTimer(
+   ScopedLock lock(sync);
+ 
+   // Lazily start thread when first timer is requested
+-  if (!worker.joinable())
++#ifndef __EMSCRIPTEN__   // Adventure Forever's browser build: no threads in plain WebAssembly, so timers
++  if (!worker.joinable())  // (a 0.5 s event clear at start, and log pacing) simply never fire
+     worker = std::thread(&TimerManager::timerThreadWorker, this);
++#endif
+ 
+   // Assign an ID and insert it into function storage
+   auto id = nextId++;

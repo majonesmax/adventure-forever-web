@@ -1,0 +1,44 @@
+# Builds the Stella core as WebAssembly and publishes the page to GitHub Pages. The ROM is never part of
+# it: the page asks the player for their own file. Untested until the repository is on GitHub with Pages
+# set to "GitHub Actions" (Settings -> Pages -> Source).
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: latest
+      - name: Build the core and the page
+        run: sh core/build.sh build
+      - name: The site is out/ without the Node test
+        run: rm -f out/test.mjs out/shim.o out/stella_libretro.a
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

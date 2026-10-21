@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Adventure Forever</title>
+<style>
+  body { font-family: ui-monospace, Menlo, monospace; background: #111; color: #ddd; margin: 16px; }
+  canvas { image-rendering: pixelated; width: 640px; height: 456px; background: #000; display: block; }
+  pre { font-size: 13px; line-height: 1.4; }
+  .row { display: flex; gap: 24px; flex-wrap: wrap; }
+  #status { color: #9c9; }
+</style>
+</head>
+<body>
+<h3>Adventure Forever - the 2600 in the browser (Stella as WebAssembly)</h3>
+<p>ROM: <input type="file" id="rom" accept=".a26,.bin"> &nbsp; <span id="status">loading core…</span></p>
+<p>Arrows move, Space is the button, Enter is Reset (start), Shift is Select. Click the page once for sound.</p>
+<div class="row">
+  <canvas id="screen" width="160" height="228"></canvas>
+  <pre id="ram"></pre>
+</div>
+<script type="module">
+import createStella from "./stella.js";
+
+const JOY = { B: 0, SELECT: 2, START: 3, UP: 4, DOWN: 5, LEFT: 6, RIGHT: 7 };
+const KEYS = { ArrowUp: JOY.UP, ArrowDown: JOY.DOWN, ArrowLeft: JOY.LEFT, ArrowRight: JOY.RIGHT,
+               " ": JOY.B, Enter: JOY.START, Shift: JOY.SELECT };
+const status = document.getElementById("status");
+const canvas = document.getElementById("screen");
+const context = canvas.getContext("2d");
+const ramView = document.getElementById("ram");
+
+const stella = await createStella();
+stella._af_init();
+status.textContent = "core ready - choose your adventure.a26";
+
+let joyMask = 0;
+addEventListener("keydown", (event) => { if (event.key in KEYS) { joyMask |= 1 << KEYS[event.key]; event.preventDefault(); } });
+addEventListener("keyup", (event) => { if (event.key in KEYS) joyMask &= ~(1 << KEYS[event.key]); });
+
+// Sound: each frame's samples are queued as one small buffer at the core's own sample rate.
+let audioContext = null, audioCursor = 0;
+addEventListener("click", () => { if (!audioContext) audioContext = new AudioContext({ sampleRate: stella._af_sample_rate() }); }, { once: true });
+function playAudio() {
+  if (!audioContext) return;
+  const frames = stella._af_audio_frames();
+  if (!frames) return;
+  const base = stella._af_audio() / 2;
+  const buffer = audioContext.createBuffer(2, frames, audioContext.sampleRate);
+  const left = buffer.getChannelData(0), right = buffer.getChannelData(1);
+  const heap = stella.HEAP16 ?? new Int16Array(stella.HEAPU8.buffer);
+  for (let i = 0; i < frames; i++) { left[i] = heap[base + i * 2] / 32768; right[i] = heap[base + i * 2 + 1] / 32768; }
+  const source = audioContext.createBufferSource();
+  source.buffer = buffer; source.connect(audioContext.destination);
+  const now = audioContext.currentTime;
+  if (audioCursor < now) audioCursor = now + 0.02;   // fell behind: start again a little ahead
+  source.start(audioCursor); audioCursor += frames / audioContext.sampleRate;
+}
+
+function drawFrame() {
+  const width = stella._af_frame_width(), height = stella._af_frame_height(), pitch = stella._af_frame_pitch();
+  if (!width) return;
+  if (canvas.width !== width || canvas.height !== height) { canvas.width = width; canvas.height = height; }
+  const image = context.createImageData(width, height);
+  const pixels = stella.HEAPU8.subarray(stella._af_frame(), stella._af_frame() + height * pitch);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const from = y * pitch + x * 4, to = (y * width + x) * 4;   // XRGB8888 is stored blue, green, red, unused
+      image.data[to] = pixels[from + 2]; image.data[to + 1] = pixels[from + 1]; image.data[to + 2] = pixels[from]; image.data[to + 3] = 255;
+    }
+  }
+  context.putImageData(image, 0, 0);
+}
+
+function showRam() {
+  const ram = stella.HEAPU8.subarray(stella._af_ram(), stella._af_ram() + 128);
+  const lines = [];
+  for (let row = 0; row < 128; row += 16) {
+    const hex = Array.from(ram.subarray(row, row + 16), (b) => b.toString(16).padStart(2, "0")).join(" ");
+    lines.push(`$${(0x80 + row).toString(16).toUpperCase()}  ${hex}`);
+  }
+  lines.push("", `hero: room $${ram[0x0A].toString(16)}  x ${ram[0x0B]}  y ${ram[0x0C]}    carrying $${ram[0x1D].toString(16)}`);
+  ramView.textContent = lines.join("\n");
+}
+
+let frames = 0, busy = 0, lastReport = performance.now(), total = 0;
+const demo = new URLSearchParams(location.search).has("demo");   // for headless testing: Reset, then walk right
+function demoJoy(frame) {
+  if (frame >= 10 && frame < 20) return 1 << JOY.START;
+  if (frame >= 60 && frame < 150) return 1 << JOY.RIGHT;
+  return 0;
+}
+function loop() {
+  const start = performance.now();
+  stella._af_set_joy(demo ? demoJoy(total++) : joyMask);
+  stella._af_run();
+  drawFrame(); playAudio(); showRam();
+  busy += performance.now() - start; frames++;
+  if (start - lastReport > 1000) {
+    status.textContent = `running: ${frames} frames/s, ${(busy / frames).toFixed(2)} ms of work per frame`;
+    frames = 0; busy = 0; lastReport = start;
+  }
+  requestAnimationFrame(loop);
+}
+
+async function loadRom(bytes) {
+  const pointer = stella._malloc(bytes.length);
+  stella.HEAPU8.set(bytes, pointer);
+  if (!stella._af_load(pointer, bytes.length)) { status.textContent = "the core refused that file"; return; }
+  status.textContent = `loaded ${bytes.length} bytes, ${stella._af_fps()} fps`;
+  canvas.focus();
+  requestAnimationFrame(loop);
+}
+document.getElementById("rom").addEventListener("change", async (event) => {
+  loadRom(new Uint8Array(await event.target.files[0].arrayBuffer()));
+});
+const romUrl = new URLSearchParams(location.search).get("rom");   // for testing: ?rom=adventure.a26 on a local server
+if (romUrl) loadRom(new Uint8Array(await (await fetch(romUrl)).arrayBuffer()));
+</script>
+</body>
+</html>
